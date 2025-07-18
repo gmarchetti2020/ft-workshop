@@ -71,6 +71,12 @@ mkdir tunix
 sudo chmod +777 tunix
 cd tunix
 
+# comment out the "Self" import from this line:
+# https://github.com/google/tunix/blob/b7fcd9a391fea0c5e82fba161eabb177655005b9/tunix/models/gemma/gemma.py#L20
+# and add this line of code
+# from typing_extensions import Self
+nano tunix/models/gemma/gemma.py
+
 # call fine tuning
 python3 tunix_train.py
 
