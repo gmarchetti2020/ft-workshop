@@ -27,4 +27,4 @@ spec:
     path: /metrics
   selector:
     matchLabels:
-      app: vllm-gemma-1-7b
+      app: vllm-gemma-3-1b

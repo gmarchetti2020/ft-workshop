@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vllm-gemma-1-7b
+  name: vllm-gemma-3-1b
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vllm-gemma-1-7b
+      app: vllm-gemma-3-1b
   template:
     metadata:
       labels:
-        app: vllm-gemma-1-7b
+        app: vllm-gemma-3-1b
     spec:
       serviceAccountName: default
       containers:
@@ -36,7 +36,7 @@ spec:
             - --dtype=bfloat16
           env:
             - name: MODEL
-              value: gimarchetti/gemma1-7b-openmath
+              value: gimarchetti/gemma3-1b-openmath
             - name: HUGGING_FACE_HUB_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -89,10 +89,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: vllm-gemma-1-7b
+  name: vllm-gemma-3-1b
 spec:
   selector:
-    app: vllm-gemma-1-7b
+    app: vllm-gemma-3-1b
   type: ClusterIP
   ports:
     - protocol: TCP
@@ -102,12 +102,12 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: vllm-gemma-1-7b
+  name: vllm-gemma-3-1b
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: vllm-gemma-1-7b
+    name: vllm-gemma-3-1b
   minReplicas: 1
   maxReplicas: 2
   behavior:
@@ -120,7 +120,7 @@ spec:
           name: prometheus.googleapis.com|inference_pool_average_kv_cache_utilization|gauge
           selector:
             matchLabels:
-              metric.labels.name: vllm-gemma-1-7b
+              metric.labels.name: vllm-gemma-3-1b
         target:
           type: AverageValue
           averageValue: 10m

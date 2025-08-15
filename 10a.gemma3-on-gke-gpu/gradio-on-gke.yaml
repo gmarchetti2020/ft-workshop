@@ -29,11 +29,11 @@ spec:
             - name: CONTEXT_PATH
               value: "/v1/chat/completions"
             - name: HOST
-              value: "http://vllm-gemma-1-7b:8000"
+              value: "http://vllm-gemma-3-1b:8000"
             - name: LLM_ENGINE
               value: "openai-chat"
             - name: MODEL_ID
-              value: "gimarchetti/gemma1-7b-openmath"
+              value: "gimarchetti/gemma3-1b-openmath"
             - name: DISABLE_SYSTEM_MESSAGE
               value: "true"
           ports:

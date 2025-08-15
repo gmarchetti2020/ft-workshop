@@ -269,7 +269,7 @@ model, endpoint = deploy_model_hexllm(
     model_name=get_job_name_with_datetime(prefix=MODEL_NAME_HEXLLM),
     model_id=FT_HF_MODEL, #MODEL_ID,
     publisher="google",
-    publisher_model_id="gemma-7b",
+    publisher_model_id="gemma3-1b-instruct",
     base_model_id=HF_MODEL_ID,
     tensor_parallel_size=tensor_parallel_size,
     machine_type=machine_type,

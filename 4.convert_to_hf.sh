@@ -1,35 +1,54 @@
 #!/bin/bash
 
-# A script to convert a Gemma model to Hugging Face format.
-# It sources configuration from a file.
+# This script converts a Keras model to Hugging Face format (creating a .safetensors file)
+# and then copies the .safetensors file to a final destination directory.
 #
-# Usage: ./convert_to_vllm.sh [path/to/config_file.conf]
-# If no config file is provided, it defaults to 'conversion.conf' in the same directory.
+# Usage: ./4.convert_to_hf.sh <keras_model_path> <hf_output_dir> <final_dest_dir>
+#   - keras_model_path: Path to the input Keras model file (.keras).
+#   - hf_output_dir: Directory where the converted Hugging Face model files will be saved.
+#                    This script assumes the safetensors file will be named 'model.safetensors' inside this directory.
+#   - final_dest_dir: The final directory to which the 'model.safetensors' file will be copied.
 
 set -euo pipefail
 
-# --- Configuration ---
-CONFIG_FILE="${1:-config.conf}"
-
-if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Error: Configuration file not found at '$CONFIG_FILE'" >&2
+# --- Argument Validation ---
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <keras_model_path> <hf_output_dir> <final_dest_dir>" >&2
+    echo "Example: $0 /mnt/content/finetuned3/model.keras /mnt/content/finetuned3_hf /mnt/content/frankenmodel_hf" >&2
     exit 1
 fi
 
-source "$CONFIG_FILE"
+KERAS_MODEL_PATH="$1"
+HF_OUTPUT_DIR="$2"
+FINAL_DEST_DIR="$3"
+
+# The python script that performs the conversion.
+# The original script had a typo '33.gemma3keras__hfconverter.py'.
+# Based on the provided files, 'gemma3keras_hf_converter.py' is the correct script in this context.
+PYTHON_CONVERTER_SCRIPT="gemma3keras_hf_converter.py"
+SAFETENSORS_FILENAME="model.safetensors"
+
+# --- Pre-flight checks ---
+if [ ! -f "$KERAS_MODEL_PATH" ]; then
+    echo "Error: Keras model file not found at '$KERAS_MODEL_PATH'" >&2
+    exit 1
+fi
+
+if [ ! -f "$PYTHON_CONVERTER_SCRIPT" ]; then
+    echo "Error: Python converter script not found: '$PYTHON_CONVERTER_SCRIPT'" >&2
+    exit 1
+fi
 
 # --- Execution ---
-echo "Starting model conversion using config from '${CONFIG_FILE}'..."
-python export_gemma_to_hf.py \
-    --weights_file "${WEIGHTS_FILE}" \
-    --size "${MODEL_SIZE}" \
-    --vocab_path "${VOCAB_PATH}" \
-    --gemma_version "${GEMMA_VERSION}" \
-    --output_dir "${OUTPUT_DIR}"
+echo "Starting Keras to Hugging Face conversion for '$KERAS_MODEL_PATH'..."
+python "$PYTHON_CONVERTER_SCRIPT" "$KERAS_MODEL_PATH" "$HF_OUTPUT_DIR" --model_size 1b
 
-echo "Conversion complete. Output is in '${OUTPUT_DIR}'."
+echo "Conversion complete. Safetensors created in '$HF_OUTPUT_DIR'."
 
-echo "Patching in a chat template. It's a hack!"
-echo "The model is not tuned for chatting, only Q&A. We're doing this to overcome a bug in vllm later."
-jq --arg tpl "$GEMMA_CHAT" '.chat_template = $tpl' "${OUTPUT_DIR}"/tokenizer_config.json > tmp.json && mv tmp.json "${OUTPUT_DIR}"/tokenizer_config.json
-echo "Done."
+SAFETENSORS_SRC_PATH="${HF_OUTPUT_DIR}/${SAFETENSORS_FILENAME}"
+
+echo "Copying '$SAFETENSORS_SRC_PATH' to '$FINAL_DEST_DIR'..."
+mkdir -p "$FINAL_DEST_DIR"
+cp "$SAFETENSORS_SRC_PATH" "$FINAL_DEST_DIR"
+
+echo "--- ✅ Done ---"

@@ -214,7 +214,7 @@ def deploy_model_vllm_gpu(
 
 model, endpoint = deploy_model_vllm_gpu(
         model_name=get_job_name_with_datetime(prefix=MODEL_NAME_VLLM),
-        base_model_id="google/gemma-7b",
+        base_model_id="google/gemma3-1b-it",
         model_id=FT_HF_MODEL, #DEPLOYED_MODEL_URI,
         service_account=SERVICE_ACCOUNT,
         machine_type="g2-standard-12",

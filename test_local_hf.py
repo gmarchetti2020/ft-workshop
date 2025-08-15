@@ -11,13 +11,15 @@ TEST_EXAMPLES = [
 # Prompt template for the training data and the finetuning tests
 PROMPT_TEMPLATE = "user: {instruction}\nmodel: {response}\n"
 
+#PROMPT_TEMPLATE = "prompts: {instruction}\nresponses: {response}\n"
+
 TEST_PROMPTS = [
         PROMPT_TEMPLATE.format(instruction=example, response="")
         for example in TEST_EXAMPLES
         ]
 
 def test_transformers_model(
-        model: transformers.GemmaForCausalLM,
+        model: transformers.Gemma3ForCausalLM,
         tokenizer: transformers.GemmaTokenizer,
 ) -> None:
     for prompt in TEST_PROMPTS:
@@ -40,7 +42,7 @@ def main():
     args = parser.parse_args()
 
     print(f"Loading model from: {args.huggingface_model_dir}")
-    model = transformers.GemmaForCausalLM.from_pretrained(
+    model = transformers.Gemma3ForCausalLM.from_pretrained(
         args.huggingface_model_dir,
         local_files_only=True,
         device_map="auto",  # Library "accelerate" to auto-select GPU

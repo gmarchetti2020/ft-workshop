@@ -24,11 +24,8 @@ KAGGLE_KEY = os.environ.get("KAGGLE_KEY")
 MODEL_NAME = os.environ.get("MODEL_NAME")
 DATASET_NAME = os.environ.get("DATASET_NAME")
 
-EPOCHS = os.environ.get("EPOCHS")
-BATCH_PER_TPU = os.environ.get("BATCH_PER_TPU")
-
-if not all([KAGGLE_USERNAME, KAGGLE_KEY, MODEL_NAME, DATASET_NAME, EPOCHS, BATCH_PER_TPU]):
-    print("❌ Error: KAGGLE_USERNAME, KAGGLE_KEY, MODEL_NAME, EPOCHS, BATCH_PER_TPU and DATASET_NAME must be set in config.conf.")
+if not all([KAGGLE_USERNAME, KAGGLE_KEY, MODEL_NAME, DATASET_NAME]):
+    print("❌ Error: KAGGLE_USERNAME, KAGGLE_KEY, MODEL_NAME, and DATASET_NAME must be set in config.conf.")
     sys.exit(1)
 
 # The Keras 3 distribution API is only implemented for the JAX backend for now.
@@ -40,22 +37,18 @@ os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.9"
 """
 A few configuration parameters
 """
-# MODEL_NAME is now read from config.conf
-# Deduce model size from name format: "gemma2[_instruct]_{2b,9b}_en"
-#MODEL_SIZE = MODEL_NAME.split("_")[-2]
-#assert MODEL_SIZE in ("2b", "7b")
 
 # Dataset
 DATASET_PATH = f"{DATASET_NAME}.jsonl"
 
 # Finetuned model
-FINETUNED_MODEL_DIR = "/mnt/content/finetuned"
-FINETUNED_KERAS_DIR = "/mnt/content/finetuned_keras"
-FINETUNED_WEIGHTS_PATH = f"{FINETUNED_MODEL_DIR}/model.weights.h5"
+FINETUNED_MODEL_DIR = "/mnt/content/finetuned3"
+FINETUNED_KERAS_DIR = "/mnt/content/finetuned_keras3"
+FINETUNED_WEIGHTS_PATH = f"{FINETUNED_MODEL_DIR}/model.keras"
 FINETUNED_VOCAB_PATH = f"{FINETUNED_MODEL_DIR}/vocabulary.spm"
 
-#EPOCHS=10
-#BATCH_PER_TPU=4
+EPOCHS=3
+BATCH_PER_TPU=4
 BATCH_SIZE=BATCH_PER_TPU*NUM_TPUS
 
 """
@@ -74,56 +67,12 @@ keras.utils.set_random_seed(42)
 keras.mixed_precision.set_global_policy("mixed_bfloat16")
 import keras_hub
 
-# Create a device mesh with (1, 8) shape so that the weights are sharded across
-# all 4 TPUs.
-device_mesh = keras.distribution.DeviceMesh(
-            (1, NUM_TPUS),
-            ["batch", "model"],
-            devices=keras.distribution.list_devices())
+data_parallel = keras.distribution.DataParallel(devices=jax.devices())
+keras.distribution.set_distribution(data_parallel)
 
-
-"""
-LayoutMap from the distribution API specifies how the weights and tensors should be sharded or replicated,
-using the string keys, for example, token_embedding/embeddings below,
-which are treated like regex to match tensor paths. Matched tensors are sharded with model dimensions (4 TPUs);
-others will be fully replicated.
-"""
-
-model_dim = "model"
-
-layout_map = keras.distribution.LayoutMap(device_mesh)
-
-# Weights that match 'token_embedding/embeddings' will be sharded on 4  TPUs
-layout_map["token_embedding/embeddings"] = (model_dim, None)
-# Regex to match against the query, key and value matrices in the decoder
-# attention layers
-layout_map["decoder_block.*attention.*(query|key|value).*kernel"] = (model_dim, None, None)
-
-layout_map["decoder_block.*attention_output.*kernel"] = (model_dim, None, None)
-layout_map["decoder_block.*ffw_gating.*kernel"] = (None, model_dim)
-layout_map["decoder_block.*ffw_linear.*kernel"] = (model_dim, None)
-
-"""
-ModelParallel allows you to shard model weights or activation tensors across all devices on the DeviceMesh.
-In this case, some of the Gemma 7B model weights are sharded across 4 TPU chips
-according to the layout_map defined above. Now load the model in the distributed way.
-"""
-
-model_parallel = keras.distribution.ModelParallel(
-            layout_map=layout_map, batch_dim_name="batch")
-
-keras.distribution.set_distribution(model_parallel)
-gemma_lm = keras_hub.models.GemmaCausalLM.from_preset(f"{MODEL_NAME}")
+gemma_lm = keras_hub.models.Gemma3CausalLM.from_preset(f"{MODEL_NAME}")
 gemma_lm.summary()
 
-"""
-Now verify that the model has been partitioned correctly. Let's take decoder_block_1 as an example.
-"""
-
-decoder_block_1 = gemma_lm.backbone.get_layer('decoder_block_1')
-print(type(decoder_block_1))
-for variable in decoder_block_1.weights:
-      print(f'{variable.path:<58}  {str(variable.shape):<16}  {str(variable.value.sharding.spec)}')
 
 """
 Inference before finetuning
@@ -136,22 +85,20 @@ TEST_EXAMPLES = [
         "Bea has $40. She wants to rent a bike for $4/hour. How many hours can she ride the bike?",
         ]
 
-# Prompt template for the training data and the finetuning tests
-PROMPT_TEMPLATE = "user: {instruction}\nmodel: {response}\n"
-
 TEST_PROMPTS = [
-        PROMPT_TEMPLATE.format(instruction=example, response="")
-        for example in TEST_EXAMPLES
+        {"prompts": "user: "+example, "responses":""} for example in TEST_EXAMPLES
         ]
 
-gemma_lm.compile(sampler="greedy")
+sampler = keras_hub.samplers.TopKSampler(k=5, seed=2)
+
+gemma_lm.compile(sampler=sampler)
 
 print ("Before fine-tuning:\n")
 
-for test_example in TEST_EXAMPLES:
-        response = gemma_lm.generate(test_example, max_length=256)
-        output = response[len(test_example) :]
-        print(f"{test_example}\n{output!r}\n")
+for test_prompt in TEST_PROMPTS:
+        response = gemma_lm.generate(test_prompt, max_length=256)
+        output = response[len(test_prompt["prompts"][0]):]
+        print(test_prompt["prompts"][0]+f"\n{output}\n")
 
 """
 Download and prepare dataset
@@ -161,28 +108,24 @@ print("\nDowloading and preparing fine-tuning dataset...\n")
 
 #os.system(f"wget -nv -nc -O {DATASET_PATH} {DATASET_URL}")
 
-def generate_training_data(training_ratio: int = 100) -> list[str]:
-        assert 0 < training_ratio <= 100
-        data = []
+def generate_training_data():
+        prompts=[]
+        responses=[]
         with open(DATASET_PATH, 'r', encoding='utf-8') as file:
             for line in file:
                 features = json.loads(line)
                 # Format the data into the prompt template
-                data.append(PROMPT_TEMPLATE.format(
-                    instruction=features["input_text"],
-                    response=features["output_text"]
-                ))
-        print("Shuffling training data...")
-        random.shuffle(data)
-
-        total_data_count = len(data)
-        training_data_count = total_data_count * training_ratio // 100
-        print(f"Training examples: {training_data_count}/{total_data_count}")
-        return data[:training_data_count]
+                prompts.append("user: "+features["input_text"]),
+                responses.append("model: "+features["output_text"])
+        data={
+                "prompts": prompts[:48000],
+                "responses": responses[:48000]
+            }
+        return data
 
 # Limit to 10% for test purposes
 
-training_data = generate_training_data(training_ratio=100)
+training_data = generate_training_data()
 
 
 """
@@ -200,7 +143,7 @@ print ("\nFine-tuning...\n")
 #gemma_lm.backbone.enable_lora(rank=4) #DOES NOT SEEM TO WORK WITH SHARDING
 #gemma_lm.summary()
 
-# Limit the input sequence length to 128 to control memory usage.
+# Limit the input sequence length to 256 to control memory usage.
 gemma_lm.preprocessor.sequence_length = 256
 # Use AdamW (a common optimizer for transformer models).
 optimizer = keras.optimizers.AdamW(
@@ -214,9 +157,9 @@ gemma_lm.compile(
         loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
         optimizer=optimizer,
         weighted_metrics=[keras_hub.metrics.Perplexity(from_logits=True)],
-        sampler="greedy")
+        sampler=sampler)
 
-gemma_lm.fit(training_data, epochs=EPOCHS, batch_size=BATCH_SIZE)
+gemma_lm.fit(training_data, epochs=EPOCHS, batch_size=BATCH_SIZE, )
 
 """
 Inference after fine-tuning
@@ -235,7 +178,9 @@ print ("\nSaving fine-tuned model weights...\n")
 os.system("mkdir -p "+FINETUNED_MODEL_DIR)
 os.system("mkdir -p "+FINETUNED_KERAS_DIR)
 
-gemma_lm.save_weights(FINETUNED_WEIGHTS_PATH, overwrite=True)
+#gemma_lm.save_weights(FINETUNED_WEIGHTS_PATH, overwrite=True)
+
+gemma_lm.save(FINETUNED_WEIGHTS_PATH, overwrite=True)
 
 gemma_lm.preprocessor.tokenizer.save_assets(FINETUNED_MODEL_DIR)
 
