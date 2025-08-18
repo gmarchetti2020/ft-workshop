@@ -43,7 +43,7 @@ Within the VM, type the following commands:
 
 From the console, log into the vm again, then:
 
-8. `cd ft-workshop`  
+8. `cd ft-workshop/Keras3`  
 9. `source 2.setup.sh`   
    This script sets up some system configuration, mounts the previously created volume to /mnt/content directory and then installs all the required libraries in the correct order. Note that we are installing jax for tpu, but only the cpu versions of tensorflow and pytorch.  
 10. Create a bucket in the same region as the VM with:  
