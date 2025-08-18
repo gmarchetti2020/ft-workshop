@@ -1,1 +1,0 @@
-kubectl apply -f 10a.gemma1-on-gke-gpu
