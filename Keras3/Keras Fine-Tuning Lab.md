@@ -37,7 +37,7 @@ From the cloud console:
 Within the VM, type the following commands:
 
 5. `git clone https://github.com/gmarchetti2020/ft-workshop`  
-6. `cd ft-workshop`  
+6. `cd ft-workshop/Keras3`  
 7. `source 1.update.sh`.   
    This script will download system updates, apply them and then reboot. The process happens anyway as an unattended upgrade at an unspecified time. This allows us to minimize unexpected downtime.
 
