@@ -88,6 +88,7 @@ def create_datasets(
     max_target_length: int,
     num_train_epochs: int | None,
     tokenizer: GemmaTokenizer,
+    local_file_path: str,
     instruct_tuned: bool = False,
     input_template: dict[str, str] | None = None,
 ) -> tuple[Iterable[TrainingInput], Iterable[TrainingInput]]:
@@ -101,6 +102,7 @@ def create_datasets(
       dataset will be repeated indefinitely.
     tokenizer: The tokenizer to use for tokenizing the dataset.
     instruct_tuned: Whether the dataset should be instruct tuned.
+    local_file_path: If HF Dataset needs to be picked from a local file
     input_template: The input template to use for the dataset.
 
   Returns:
@@ -113,9 +115,12 @@ def create_datasets(
         dataset_name, data_dir="en-fr", split=("train", "validation")
     )
   elif dataset_name == "medalpaca/medical_meadow_medqa":  # Medical instruction dataset
-    train_ds = datasets.load_dataset(
-        dataset_name, split=("train")
-    )   
+    if local_file_path is not None:
+       train_ds = datasets.load_dataset('json', data_files=local_file_path, split=("train"))
+    else:
+       train_ds = datasets.load_dataset(
+           dataset_name, split=("train")
+       )   
     split_dataset = train_ds.train_test_split(test_size=0.2, seed=42)
     train_ds = split_dataset['train']
     eval_ds = split_dataset['test']

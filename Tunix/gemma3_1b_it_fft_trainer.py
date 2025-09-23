@@ -74,7 +74,7 @@ import jax.numpy as jnp
 import kagglehub
 import optax
 from orbax import checkpoint as ocp
-from qwix import lora
+#from qwix import lora
 from tunix.generate import sampler as sampler_lib
 import data as data_lib
 from tunix.models.gemma import gemma as gemma_lib
@@ -85,14 +85,30 @@ from tunix.sft import peft_trainer
 import wandb
 from safetensors.flax import save_file
 from huggingface_hub import snapshot_download
+from tunix.rl import common
 
 # -- Global Constants --
 # Model
-MESH = [(1, 4), ("fsdp", "tp")]
+#MESH = [(1, 1), ("fsdp", "tp")]
+print ("Checking Device shape .........")
+device_count = jax.device_count()
+print (f"Found ... {device_count} chips")
+print("Setting Mesh shape accordingly..")
+if device_count == 1:
+    MESH = [(1, 1), ("fsdp", "tp")]
+elif device_count == 4:
+    MESH = [(1, 4), ("fsdp", "tp")]
+else:
+    MESH = [(2, 4), ("fsdp", "tp")]
+print(f"Using MESH: {MESH}")
+
+
+
+
 
 def parse_args():
     """Parses command-line arguments."""
-    parser = argparse.ArgumentParser(description="Gemma3 1B Medical QA FFT Trainer")
+    parser = argparse.ArgumentParser(description="Gemma3 1B IT Medical QA full finetuning Trainer")
     parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training.")
     parser.add_argument("--rank", type=int, default=8, help="Rank for LoRA.")
     parser.add_argument("--alpha", type=float, default=1.0, help="Alpha for LoRA.")
@@ -100,16 +116,17 @@ def parse_args():
     parser.add_argument("--eval_every_n_steps", type=int, default=20, help="Evaluate every N steps.")
     parser.add_argument("--num_epochs", type=int, default=1, help="Number of training epochs.")
     parser.add_argument("--dataset_name", type=str, default='medalpaca/medical_meadow_medqa', help="The name of the dataset to use.")
-    parser.add_argument("--intermediate_ckpt_dir", type=str, required=True,default="./output/intermediate_ckpt/fft/v3/", help="Intermediate checkpoint directory.")
+    parser.add_argument("--intermediate_ckpt_dir", type=str, required=True, default="./output/intermediate_ckpt/fft/v3/", help="Intermediate checkpoint directory.")
     parser.add_argument("--ckpt_dir", type=str,required=True, default="./output/ckpts/medical/fft/v3/", help="Checkpoint directory.")
     parser.add_argument("--profiling_dir", type=str, required=True, default="./output/profiling/", help="Profiling directory.")
     parser.add_argument("--servable_ckpt_dir", type=str, required=True, default="./output/servable_ckpt/fft/v1/", help="Servable checkpoint directory.")
     parser.add_argument("--test_prompts_file", type=str, default=None, help="Path to a file containing test prompts, one per line.")
+    parser.add_argument("--local_file_path", type=str, default=None, help="Local path  to HF dataset file")
     return parser.parse_args()
 
 def setup_environment(args):
     """Sets up the environment, creating directories and handling Kaggle login."""
-    print("Welcome to Corrected Gemma3 1B LoRA Tuning")
+    print("Welcome to Gemma3-1B-IT Full FineTuning using the tunix library")
     print("Let's have some fun with Gemma3!")
     os.environ["JAX_TRACEBACK_FILTERING"] = "off"
 
@@ -191,7 +208,7 @@ def run_inference(model, tokenizer, model_config, prompt_text, title="Inference"
     )
     out_data = sampler(
         input_strings=prompt_text,
-        total_generation_steps=50,
+        max_generation_steps=50,
     )
     for i, (input_string, out_string) in enumerate(zip(prompt_text, out_data.text)):
         print(f"----------------------")
@@ -209,13 +226,14 @@ def train_model(model, tokenizer, mesh, args):
         max_target_length=256,
         num_train_epochs=args.num_epochs,
         tokenizer=tokenizer,
+        local_file_path=args.local_file_path,
         instruct_tuned=True,  # Use instruction-tuned format for Gemma3-1B-IT
     )
 
     def gen_model_input_fn(x: peft_trainer.TrainingInput):
         pad_mask = x.input_tokens != tokenizer.pad_id()
-        positions = gemma_lib.build_positions_from_mask(pad_mask)
-        attention_mask = gemma_lib.make_causal_attn_mask(pad_mask)
+        positions = common.build_positions_from_mask(pad_mask)
+        attention_mask = common.make_causal_attn_mask(pad_mask)
         return {
             'input_tokens': x.input_tokens,
             'input_mask': x.input_mask,

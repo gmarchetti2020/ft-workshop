@@ -1,0 +1,2 @@
+git+https://github.com/google/tunix@v0.0.1
+wandb

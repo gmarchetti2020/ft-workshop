@@ -9,24 +9,24 @@ source venv/bin/activate
 
 
 # Install tunix
-git clone https://github.com/google/tunix.git
+#git clone https://github.com/google/tunix.git
 
 #Change directory of tunix
-cd tunix
+#cd tunix
 
 #Install tunix
-pip install .
+#pip install .
 
 #Clone Tensor Crunch
-https://github.com/shivajid/tensor_crunch.git
+#https://github.com/shivajid/tensor_crunch.git
 
 #Install Qwix
-pip install git+https://github.com/google/qwix
+#pip install git+https://github.com/google/qwix
 
-cd tensor_crunch
+#cd tensor_crunch
 
 #Install the required packages
-pip install -r requirements.txt
+#pip install -r requirements.txt
 
 
 
